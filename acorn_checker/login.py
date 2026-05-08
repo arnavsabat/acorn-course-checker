@@ -60,6 +60,27 @@ def _handle_device_trust(page: Page) -> bool:
     return False
 
 
+def _dismiss_timeout_page(page: Page) -> None:
+    """
+    If ACORN redirected to its session-timeout page, click 'Log in to ACORN'
+    so we land on the actual SSO login form rather than a dead end.
+    URL pattern: acorn.utoronto.ca/acorn/acorn-timeout/
+    """
+    if "acorn-timeout" not in page.url:
+        return
+    print("  ACORN session timeout page detected — clicking 'Log in to ACORN'...")
+    try:
+        btn = page.get_by_role("button", name="Log in to ACORN", exact=False)
+        if not btn.is_visible(timeout=3000):
+            # Also try link variant
+            btn = page.get_by_role("link", name="Log in to ACORN", exact=False)
+        btn.click()
+        page.wait_for_load_state("networkidle", timeout=15000)
+        time.sleep(1)
+    except Exception as exc:
+        print(f"  Could not click 'Log in to ACORN': {exc}")
+
+
 def login(page: Page, utoreid: str, password: str) -> bool:
     """
     Navigate to ACORN and log in with the provided credentials.
@@ -80,6 +101,10 @@ def login(page: Page, utoreid: str, password: str) -> bool:
     if is_logged_in(page):
         print("  Already logged in.")
         return True
+
+    # ACORN may redirect to its own timeout page instead of the SSO login form.
+    # Click through to get to the actual login form.
+    _dismiss_timeout_page(page)
 
     print(f"  On login page ({page.url[:80]}). Filling credentials...")
     try:
