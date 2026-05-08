@@ -12,18 +12,10 @@ from playwright.sync_api import (
 from . import discord_notify
 from .login import ACORN_COURSES_URL, is_logged_in, login
 
-# Text that definitively means the section has no open spots.
-# Anything NOT matching these is treated as "may have space" to avoid missing opens.
-_FULL_INDICATORS = frozenset(
-    {
-        "section full",
-        "not waitlistable",
-        "waitlist full",
-        "no space available",
-        "full - not waitlistable",
-        "class is full",
-    }
-)
+# The only string that definitively means no space: "Not Waitlistable".
+# If this is absent from the popup, we notify — this catches cases where
+# the lecture has space even if some tutorial sections are still full.
+_FULL_TEXT = "not waitlistable"
 
 BROWSER_PROFILE_DIR = "acorn_browser_profile"
 
@@ -154,8 +146,7 @@ def _read_popup_text(page: Page) -> Optional[str]:
 
 
 def _is_section_full(popup_text: str) -> bool:
-    lower = popup_text.lower()
-    return any(indicator in lower for indicator in _FULL_INDICATORS)
+    return _FULL_TEXT in popup_text.lower()
 
 
 # ---------------------------------------------------------------------------
