@@ -12,7 +12,8 @@ import sys
 _ROOT = os.path.dirname(os.path.abspath(__file__))
 _VENV_PYTHON = os.path.join(_ROOT, ".venv", "bin", "python3")
 
-if os.path.exists(_VENV_PYTHON) and os.path.realpath(sys.executable) != os.path.realpath(_VENV_PYTHON):
+if os.path.exists(_VENV_PYTHON) and not os.environ.get("_ACORN_VENV"):
+    os.environ["_ACORN_VENV"] = "1"
     os.execv(_VENV_PYTHON, [_VENV_PYTHON] + sys.argv)
 
 from acorn_checker.cli import main  # noqa: E402 — import after potential re-exec
