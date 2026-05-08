@@ -32,18 +32,32 @@ def is_logged_in(page: Page) -> bool:
     return True
 
 
-def _handle_device_trust(page: Page) -> None:
-    """Click a 'Yes, this is my device' style button if it appears."""
-    for label in ("Yes, this is my device", "Trust this device", "Remember this device"):
+def _handle_device_trust(page: Page) -> bool:
+    """
+    Click the DUO/SSO 'Yes, this is my device' prompt if it is visible.
+    Returns True if the prompt was found and clicked.
+    The prompt appears *after* DUO MFA completes, so this must be called
+    both right after credential submission and during the MFA waiting loop.
+    """
+    candidates = [
+        # Try by role first (most reliable)
+        lambda: page.get_by_role("button", name="Yes, this is my device", exact=False),
+        # DUO renders it as a plain link on some pages
+        lambda: page.get_by_role("link", name="Yes, this is my device", exact=False),
+        # Fallback: match by visible text anywhere on the page
+        lambda: page.locator("text=Yes, this is my device").first,
+    ]
+    for make_locator in candidates:
         try:
-            btn = page.get_by_role("button", name=label, exact=False)
-            if btn.is_visible(timeout=2500):
-                print(f"  Handling device trust prompt: '{label}'")
-                btn.click()
+            el = make_locator()
+            if el.is_visible(timeout=1000):
+                print("  Clicking 'Yes, this is my device'...")
+                el.click()
                 page.wait_for_load_state("networkidle", timeout=15000)
-                return
+                return True
         except Exception:
             continue
+    return False
 
 
 def login(page: Page, utoreid: str, password: str) -> bool:
@@ -96,15 +110,18 @@ def login(page: Page, utoreid: str, password: str) -> bool:
         print("  Login successful.")
         return True
 
-    # Could be MFA / DUO / another step — give the user time to act manually
+    # Could be DUO MFA or another manual step — wait up to 120 s.
+    # After the user approves DUO, the 'Is this your device?' prompt appears
+    # before the final redirect, so we check for it on every tick.
     print(
-        f"  Login may need manual action (MFA/2FA?). Current URL: {page.url[:80]}\n"
+        f"  Login may need manual action (DUO/MFA). Current URL: {page.url[:80]}\n"
         "  Please complete the login in the browser window (up to 120 s)..."
     )
     for _ in range(24):
         time.sleep(5)
+        _handle_device_trust(page)  # fires after DUO approval, before ACORN redirect
         if is_logged_in(page):
-            print("  Login completed (manual).")
+            print("  Login completed.")
             return True
 
     return False
